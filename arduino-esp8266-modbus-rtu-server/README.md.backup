@@ -1,0 +1,18 @@
+# arduino-esp8266-modbus-rtu-server
+Пример Modbus RTU сервера на ESP8266, написано в Arduino.
+
+Таблица регистров:
+Адрес  | Тип			| Описание
+------ | -------------	| ------------
+0      | Discrete Input	| Ошибка инициализации сенсора CCS811
+1      | Input Register	| Значение eCO2
+2      | Input Register	| Значение TVOC
+3      | Input Register	| Значение Baseline
+4      | Discrete Input	| Ошибка инициализации файловой системы
+100    | Holding		| Modbus-адрес устройства
+101    | Holding		| Стоп биты
+102    | Holding		| Скорость обмена, делённая на 100
+
+Дополнения:
+- /adds/schematic.png — схема подключения;
+- /adds/config-ad-demo.json — шаблон для драйвера wb-mqtt-serial, который используется в контроллерах Wiren Board.

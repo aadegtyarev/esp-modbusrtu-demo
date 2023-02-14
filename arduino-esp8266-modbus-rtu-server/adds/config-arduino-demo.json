@@ -1,0 +1,73 @@
+{
+    "device_type": "arduino-demo",
+    "title": "ARDUINO-DEMO",
+    "group": "g-custom",
+    "device": {
+        "name": "ARDUINO-DEMO",
+        "id": "arduino-demo",
+        "groups": [
+            {
+                "title": "Inputs",
+                "id": "inputs",
+                "order": 0
+            },
+            {
+                "title": "Settings",
+                "id": "settings",
+                "order": 1
+            }
+        ],
+        "channels": [
+            {
+                "name": "Test register",
+                "reg_type": "holding",
+                "address": 0,
+                "type": "value",
+                "readonly": false,
+                "group": "inputs"
+            }
+        ],
+        "parameters": [
+            {
+                "id": "address",
+                "title": "Address",
+                "reg_type": "holding",
+                "address": 100,
+                "default": 1,
+                "min": 1,
+                "max": 247,
+                "group": "settings"
+            },
+            {
+                "id": "stop-bits",
+                "title": "Stop Bits",
+                "reg_type": "holding",
+                "address": 101,
+                "default": 2,
+                "enum": [1, 2],
+                "enum_titles": ["1", "2"],
+                "group": "settings"
+            },
+            {
+                "id": "baudrate",
+                "title": "Baudrate",
+                "reg_type": "holding",
+                "address": 102,
+                "default": 96,
+                "enum": [12, 24, 48, 96, 192, 384, 576, 1152],
+                "enum_titles": ["1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200"],
+                "group": "settings"
+            }
+        ],
+        "translations": {
+            "ru": {
+                "Inputs": "Входы",
+                "Settings": "Настройки",
+                "Test register": "Тестовый регистр",
+                "Address": "Адрес устройства",
+                "Stop Bits": "Стоп биты",
+                "Baudrate": "Скорость обмена",
+            }
+        }
+    }
+}
