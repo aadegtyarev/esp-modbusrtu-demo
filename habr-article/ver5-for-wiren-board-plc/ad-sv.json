@@ -45,13 +45,6 @@
                 "address": 0,
                 "type": "switch",
                 "group": "inputs"
-            },
-            {
-                "name": "FS Error",
-                "reg_type": "discrete",
-                "address": 4,
-                "type": "switch",
-                "group": "inputs"
             }
         ],
         "parameters": [

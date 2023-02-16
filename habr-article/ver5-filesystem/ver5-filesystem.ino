@@ -6,6 +6,9 @@
 #include <Wire.h>            // Wire
 #include <SparkFunCCS811.h>  // SparkFunCCS811
 
+#include <FS.h> // SPIFFS будем использовать
+#include <ArduinoJson.h>        //Установить из менеджера библиотек
+
 /* Объявления констант */
 // Значение параметров связи по умолчанию
 #define DEFAULT_MB_ADDRESS    1  // адрес нашего сервера
@@ -17,6 +20,7 @@
 #define REG_SENSOR_ECO2   1 // eCO2
 #define REG_SENSOR_TVOC   2 // TVOC
 #define REG_SENSOR_BL     3 // Baseline
+#define REG_FS_ERROR      4 // ошибка файловой системы
 
 #define REG_MB_ADDRESS    100 // адрес устройства на шине
 #define REG_MB_STOP_BITS  101 // количество стоповых битов
@@ -24,11 +28,10 @@
 
 // Настройки EEPROM. Так как записывать в EEPROM будем числа типа uint16_t,
 // которые на ESP8266/ESP32 занимают 4 байта, то каждое значение займёт две ячейки
-#define EEPROM_SIZE           8 // мы займём 6 ячеек памяти: 4*2=8
+#define EEPROM_SIZE           6 // мы займём 6 ячеек памяти: 3*2=6
 #define EEPROM_MB_ADDRESS     0 // номер ячейки с адресом устройства
 #define EEPROM_MB_STOP_BITS   2 // номер ячейки со стоп-битами
 #define EEPROM_MB_BAUDRATE    4 // номер ячейки со скоростью
-#define EEPROM_BASELINE       6 // номер ячейки с Baseline
 
 // Описание входов-выходов
 #define PIN_FLOW 12 // D6 пин контроля направления приёма/передачи,
@@ -50,8 +53,8 @@ String configFile = "/config.json"; // имя файла конфигураци�
 /*Прочие настройки */
 ModbusRTU mb;
 CCS811 ccs811(CCS811_ADDR);  // создаем объект для работы с сенсором CCS811
-SimpleTimer sysTimer(200);    // запускаем таймер с интервалом 2c (200мс)
-SimpleTimer blTimer(3000);   // запускаем таймер с интервалом 30 с
+SimpleTimer sysTimer(10);    // запускаем таймер с интервалом 10 мс
+SimpleTimer blTimer(1000);   // запускаем таймер с интервалом 10 с
 
 /* Функции инициализации  и главный цикл */
 // Настройка устройства
@@ -61,23 +64,24 @@ void setup() {
   check_safe_mode();  // проверяем, не надо ли нам в безопасный режим с дефолтными настройками
   modbus_setup();     // настраиваем Modbus
   i2c_setup();        // инициализация i2c
-  read_baseline();    // чтение Baseline из EEPROM
+  fs_setup();
+  read_config();
 }
 
 // Главный цикл
 void loop() {
   mb.task();
-  check_timer();
+  yield();
 }
 
-void check_timer() {
+void yield() {
   if (sysTimer.isReady()) {
     read_sensor(); // опрашиваем сенсор
     sysTimer.reset(); // сбрасываем таймер
   }
 
   if (blTimer.isReady()) {
-    save_baseline(); // записываем значение Baseline в EEPROM
+    write_config(); // записываем значение Baseline в файл
     blTimer.reset();
   }
 }
@@ -103,6 +107,7 @@ void modbus_setup() {
   mb.addIreg(REG_SENSOR_ECO2);  // данные о eCO2
   mb.addIreg(REG_SENSOR_TVOC);  // данные о TVOC
   mb.addIreg(REG_SENSOR_BL);    // Baseline REG_FS_ERROR
+  mb.addIsts(REG_FS_ERROR);
 
   /*Инициализация регистров*/
   // записываем в регистры текущие значения адреса, стоповых битов и скорости
@@ -113,6 +118,7 @@ void modbus_setup() {
   mb.Ireg(REG_SENSOR_ECO2, 0);  // eCO2
   mb.Ireg(REG_SENSOR_TVOC, 0);  // TVOC
   mb.Ireg(REG_SENSOR_BL, 0);    // Baseline
+  mb.Ists(REG_FS_ERROR, 0);
 
   /* Назначение колбек функций на изменение регистров*/
   // параметры связи
@@ -145,6 +151,15 @@ void read_modbus_settings() {
   };
 }
 
+// Инициализация файловой системы
+void fs_setup() {
+  if (SPIFFS.begin()) {
+    mb.Ists(REG_FS_ERROR, 0);
+  } else {
+    mb.Ists(REG_FS_ERROR, 1);
+  }
+}
+
 // Инициализация i2c
 void i2c_setup() {
   Wire.begin();
@@ -165,17 +180,28 @@ void check_safe_mode() {
   }
 }
 
-// Чтение Baseline из EEPROM
-void read_baseline() {
-  EEPROM.get(EEPROM_BASELINE, sensorBaseLine);
-  if (sensorBaseLine != 0xffff) {
-    mb.Ireg(REG_SENSOR_BL, sensorBaseLine);
+// Чтение конфига из файла
+void read_config() {
+  DynamicJsonDocument doc(200);
+  String jsonConfig = "";
 
-    if (write_baseline(sensorBaseLine)) {
-      mb.Ists(REG_SENSOR_ERROR, 0);
-    } else {
-      mb.Ists(REG_SENSOR_ERROR, 1);
+  File cfgFile = SPIFFS.open(configFile, "r");
+
+  if (cfgFile) {
+    while (cfgFile.available()) {
+      jsonConfig += (char)cfgFile.read();
     }
+  }
+  cfgFile.close();
+
+  deserializeJson(doc, jsonConfig);
+  sensorBaseLine = doc["baseLine"];
+  mb.Ireg(REG_SENSOR_BL, sensorBaseLine);
+
+  if (write_baseline(sensorBaseLine)) {
+    mb.Ists(REG_SENSOR_ERROR, 0);
+  } else {
+    mb.Ists(REG_SENSOR_ERROR, 1);
   }
 }
 
@@ -191,9 +217,23 @@ bool write_baseline(uint16_t baseline) {
   return true;
 }
 
-// Запись Baseline в EEPROM
-void save_baseline(){
-  write_eeprom(EEPROM_BASELINE, sensorBaseLine);
+// Запись конфига в файл
+void write_config() {
+  DynamicJsonDocument doc(200);
+  String jsonConfig;
+
+  doc["baseLine"] = sensorBaseLine;
+
+  serializeJson(doc, jsonConfig);
+
+  File cfgFile = SPIFFS.open(configFile, "w");
+  if (cfgFile) {
+    cfgFile.print(jsonConfig);
+    cfgFile.close();
+    mb.Ists(REG_FS_ERROR, 0);
+  } else {
+    mb.Ists(REG_FS_ERROR, 1);
+  }
 }
 
 // Опрос сенсора
